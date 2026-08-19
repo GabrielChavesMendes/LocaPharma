@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { LogIn, UserPlus, Loader2 } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { supabase } from '../lib/supabase';

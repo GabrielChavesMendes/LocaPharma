@@ -3,7 +3,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Pill, FlaskConical, Building2, UserRound, BookmarkPlus, BookmarkCheck, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -13,7 +13,7 @@ const dic = {
   en: { origin: "Active Origin Point", saving: "Saving...", saved: "Saved", saveBtn: "Save Favorite", loginReq: "Login required to save!", error: "Error saving: " }
 };
 
-const createCustomIcon = (iconElement: JSX.Element, bgColorClass: string) => {
+const createCustomIcon = (iconElement: ReactNode, bgColorClass: string) => {
   const iconMarkup = renderToStaticMarkup(
     <div className={`w-8 h-8 ${bgColorClass} text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white`}>{iconElement}</div>
   );
