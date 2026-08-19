@@ -34,6 +34,8 @@ export default function DashboardGIS() {
   const [useRealGPS, setUseRealGPS] = useState(false);
   const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
 
+  const [apiError, setApiError] = useState<string | null>(null);
+
   const routeOrigin = (useRealGPS && userLoc) ? userLoc : anchorLoc;
   const savedTheme = localStorage.getItem('locapharma_theme') || 'light';
   const [mapStyle, setMapStyle] = useState<'light' | 'dark' | 'relief'>(savedTheme as any);
@@ -63,15 +65,53 @@ export default function DashboardGIS() {
       const overpassQuery = `[out:json][timeout:25];(nwr["amenity"="pharmacy"](around:${searchRadius}, ${lat}, ${lng});nwr["amenity"="clinic"](around:${searchRadius}, ${lat}, ${lng});nwr["amenity"="hospital"](around:${searchRadius}, ${lat}, ${lng}););out center;`;
 
       try {
-        const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
-        const data = await response.json();
-        const mapped = data.elements.map((el: any) => ({
-          id: el.id, name: el.tags?.name || 'Centro de Saúde',
-          type: el.tags?.amenity === 'clinic' || el.tags?.amenity === 'hospital' ? 'laboratorio' : 'farmacia',
-          lat: el.lat || el.center?.lat, lng: el.lon || el.center?.lon,
-        })).filter((fac: any) => fac.lat && fac.lng);
+        // Lista de servidores espelhos públicos do OpenStreetMap
+        const endpoints = [
+          'https://overpass.openstreetmap.fr/api/interpreter', // Servidor Francês (Mais permissivo com Vercel)
+          'https://overpass.kumi.systems/api/interpreter',     // Servidor Alternativo Independente
+          'https://overpass-api.de/api/interpreter'            // Servidor Alemão Principal
+        ];
+
+        let data = null;
+
+        // Tenta cada servidor até um funcionar
+        for (const endpoint of endpoints) {
+          try {
+            const res = await fetch(`${endpoint}?data=${encodeURIComponent(overpassQuery)}`);
+            if (res.ok) {
+              data = await res.json();
+              break; // Deu certo, sai do loop de tentativas!
+            }
+          } catch (err) {
+            console.warn(`Aviso: O servidor ${endpoint} demorou a responder. Tentando o próximo...`);
+            continue;
+          }
+        }
+
+        // Se rodou todos os servidores e o 'data' continuar nulo, lançamos o erro
+        if (!data) {
+          throw new Error("Todos os servidores de mapa estão congestionados no momento.");
+        }
+        
+        let mapped = data.elements.map((el: any) => {
+          let type = 'farmacia';
+          const tags = el.tags || {};
+          if (tags.amenity === 'hospital' || tags.healthcare === 'hospital' || tags.amenity === 'clinic' || tags.healthcare === 'laboratory') {
+            type = 'laboratorio';
+          }
+          const fLat = el.lat || el.center?.lat;
+          const fLng = el.lon || el.center?.lon;
+          return { id: el.id, name: tags.name || 'Centro de Saúde', type, lat: fLat, lng: fLng };
+        }).filter((fac: any) => fac.lat && fac.lng);
+
         setNearbyList(mapped);
-      } catch (error) { console.error(error); } finally { setIsLoading(false); }
+      } catch (error: any) { 
+        console.error("Erro ao buscar dados na API:", error);
+        setApiError(error.message);
+        setNearbyList([]); 
+      } finally { 
+        setIsLoading(false); 
+      }
     };
     fetchRealData();
   }, [anchorLoc, searchRadius]);
