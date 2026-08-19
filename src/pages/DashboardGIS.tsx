@@ -196,9 +196,12 @@ export default function DashboardGIS() {
             </button>
           </div>
           
-          {isLoading ? <div className="py-10 flex flex-col items-center"><Loader2 className="animate-spin text-gray-400 mb-2" /><span className="text-xs text-gray-500">{t.loading}</span></div> : (
+          {isLoading ? <div className="py-10 flex flex-col items-center"><Loader2 className="animate-spin text-gray-400 mb-2" /><span className="text-xs text-gray-500 text-center">{t.loading}</span></div> : (
             <div className="space-y-3">
-              {visibleFacilities.length === 0 && <p className="text-xs text-gray-500 text-center py-4">{t.noResults}</p>}
+              {/* Esta linha usa a variável e mostra o erro em vermelho na tela */}
+              {apiError && <p className="text-xs text-red-500 font-bold text-center py-4">Erro na API: {apiError}</p>}
+              
+              {!apiError && visibleFacilities.length === 0 && <p className="text-xs text-gray-500 text-center py-4">{t.noResults}</p>}
               {visibleFacilities.map(item => (
                 <div key={item.id} className={`p-3 rounded-lg border shadow-sm text-sm ${mapStyle === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <div className="font-bold truncate">{item.name}</div>
