@@ -8,8 +8,8 @@ import { supabase } from '../lib/supabase';
 const HOSPITAL_CENTER: [number, number] = [-19.9245, -43.9276];
 
 const dic = {
-  pt: { title: "GIS Hospitalar", search: "Buscar hospital âncora...", radius: "Raio", originTitle: "Origem da Rota e Distância", gpsOn: "Baseado no seu GPS", gpsOff: "Baseado na Âncora", surr: "Entorno", dist: "DISTÂNCIA", loading: "Buscando dados em tempo real...", notFound: "Local não encontrado.", route: "Rota", noResults: "Nenhum estabelecimento encontrado na região pela API." },
-  en: { title: "Hospital GIS", search: "Search anchor...", radius: "Radius", originTitle: "Route Origin", gpsOn: "Based on your GPS", gpsOff: "Based on Anchor", surr: "Surroundings", dist: "DISTANCE", loading: "Fetching live data...", notFound: "Location not found.", route: "Route", noResults: "No facilities found in this area via API." }
+  pt: { title: "GIS Hospitalar", search: "Buscar hospital âncora...", radius: "Raio", originTitle: "Origem da Rota e Distância", gpsOn: "Baseado no seu GPS", gpsOff: "Baseado na Âncora (Hospital)", surr: "Entorno", dist: "DISTÂNCIA", loading: "Mapeando região...", notFound: "Hospital ou local não encontrado.", route: "Rota", clear: "Limpar pesquisa e voltar ao Hospital", noResults: "Nenhum estabelecimento ativo." },
+  en: { title: "Hospital GIS", search: "Search anchor hospital...", radius: "Radius", originTitle: "Route Origin & Distance", gpsOn: "Based on your GPS", gpsOff: "Based on Anchor (Hospital)", surr: "Surroundings", dist: "DISTANCE", loading: "Mapping region...", notFound: "Hospital or location not found.", route: "Route", clear: "Clear search & return to Hospital", noResults: "No active facilities found." }
 };
 
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -23,6 +23,7 @@ export default function DashboardGIS() {
   const userType = localStorage.getItem('locapharma_user') || 'familiar';
   const isMedico = userType === 'medico';
   
+  // Puxa o idioma e o tema salvos
   const lang = (localStorage.getItem('locapharma_lang') as 'pt' | 'en') || 'pt';
   const t = dic[lang];
   const roleDisplay = userType === 'medico' ? (lang === 'pt' ? 'Médico' : 'Doctor') : (lang === 'pt' ? 'Familiar' : 'Family');
@@ -32,20 +33,17 @@ export default function DashboardGIS() {
   const [searchRadius, setSearchRadius] = useState<number>(2500); 
   const [useRealGPS, setUseRealGPS] = useState(false);
   const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
-  const [apiError, setApiError] = useState<string | null>(null);
 
   const routeOrigin = (useRealGPS && userLoc) ? userLoc : anchorLoc;
   const savedTheme = localStorage.getItem('locapharma_theme') || 'light';
   const [mapStyle, setMapStyle] = useState<'light' | 'dark' | 'relief'>(savedTheme as any);
   
-  const [layers, setLayers] = useState({ farmacias: true, laboratorios: isMedico });
-  const [nearbyList, setNearbyList] = useState<any[]>([]);
+  const [layers] = useState({ farmacias: true, laboratorios: isMedico });  const [nearbyList, setNearbyList] = useState<any[]>([]);
   const [routeTarget, setRouteTarget] = useState<[number, number] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'distance' | 'alphabetical'>('distance');
   const [savedIds, setSavedIds] = useState<string[]>([]);
 
-  // Captura o GPS real do usuário ao entrar
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((pos) => setUserLoc([pos.coords.latitude, pos.coords.longitude]));
     const fetchSaved = async () => {
@@ -58,55 +56,22 @@ export default function DashboardGIS() {
     fetchSaved();
   }, []);
 
-  // Faz a requisição na Overpass API
   useEffect(() => {
     const fetchRealData = async () => {
       setIsLoading(true);
-      setApiError(null);
       const [lat, lng] = anchorLoc;
-      
-      const overpassQuery = `
-        [out:json][timeout:25];
-        (
-          nwr["amenity"="pharmacy"](around:${searchRadius}, ${lat}, ${lng});
-          nwr["healthcare"="pharmacy"](around:${searchRadius}, ${lat}, ${lng});
-          nwr["shop"="pharmacy"](around:${searchRadius}, ${lat}, ${lng});
-          nwr["amenity"="hospital"](around:${searchRadius}, ${lat}, ${lng});
-          nwr["healthcare"="hospital"](around:${searchRadius}, ${lat}, ${lng});
-          nwr["amenity"="clinic"](around:${searchRadius}, ${lat}, ${lng});
-          nwr["healthcare"="laboratory"](around:${searchRadius}, ${lat}, ${lng});
-        );
-        out center;
-      `;
+      const overpassQuery = `[out:json][timeout:25];(nwr["amenity"="pharmacy"](around:${searchRadius}, ${lat}, ${lng});nwr["amenity"="clinic"](around:${searchRadius}, ${lat}, ${lng});nwr["amenity"="hospital"](around:${searchRadius}, ${lat}, ${lng}););out center;`;
 
       try {
         const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
-        
-        if (!response.ok) {
-          throw new Error("Falha na comunicação com a API de mapas.");
-        }
-        
         const data = await response.json();
-        
-        let mapped = data.elements.map((el: any) => {
-          let type = 'farmacia';
-          const tags = el.tags || {};
-          if (tags.amenity === 'hospital' || tags.healthcare === 'hospital' || tags.amenity === 'clinic' || tags.healthcare === 'laboratory') {
-            type = 'laboratorio';
-          }
-          const fLat = el.lat || el.center?.lat;
-          const fLng = el.lon || el.center?.lon;
-          return { id: el.id, name: tags.name || 'Centro de Saúde', type, lat: fLat, lng: fLng };
-        }).filter((fac: any) => fac.lat && fac.lng);
-
+        const mapped = data.elements.map((el: any) => ({
+          id: el.id, name: el.tags?.name || 'Centro de Saúde',
+          type: el.tags?.amenity === 'clinic' || el.tags?.amenity === 'hospital' ? 'laboratorio' : 'farmacia',
+          lat: el.lat || el.center?.lat, lng: el.lon || el.center?.lon,
+        })).filter((fac: any) => fac.lat && fac.lng);
         setNearbyList(mapped);
-      } catch (error: any) { 
-        console.error("Erro ao buscar dados na API:", error);
-        setApiError(error.message);
-        setNearbyList([]); // Zera a lista caso a API falhe
-      } finally { 
-        setIsLoading(false); 
-      }
+      } catch (error) { console.error(error); } finally { setIsLoading(false); }
     };
     fetchRealData();
   }, [anchorLoc, searchRadius]);
@@ -116,7 +81,7 @@ export default function DashboardGIS() {
     if (!searchQuery.trim()) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ' Belo Horizonte')}&limit=1`);
       const data = await res.json();
       if (data && data.length > 0) {
         setAnchorLoc([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
@@ -128,7 +93,6 @@ export default function DashboardGIS() {
   const visibleFacilities = [...nearbyList]
     .map(item => ({ ...item, distance: getDistanceInMeters(routeOrigin[0], routeOrigin[1], item.lat, item.lng) }))
     .filter(item => (item.type === 'farmacia' && layers.farmacias) || (item.type === 'laboratorio' && layers.laboratorios))
-    .filter(item => item.distance <= searchRadius)
     .sort((a, b) => sortBy === 'distance' ? a.distance - b.distance : a.name.localeCompare(b.name));
 
   return (
@@ -192,11 +156,9 @@ export default function DashboardGIS() {
             </button>
           </div>
           
-          {isLoading ? <div className="py-10 flex flex-col items-center"><Loader2 className="animate-spin text-gray-400 mb-2" /><span className="text-xs text-gray-500 text-center">{t.loading}</span></div> : (
+          {isLoading ? <div className="py-10 flex flex-col items-center"><Loader2 className="animate-spin text-gray-400 mb-2" /><span className="text-xs text-gray-500">{t.loading}</span></div> : (
             <div className="space-y-3">
-              {apiError && <p className="text-xs text-red-500 text-center py-4">Erro na API: {apiError}</p>}
-              {!apiError && visibleFacilities.length === 0 && <p className="text-xs text-gray-500 text-center py-4">{t.noResults}</p>}
-              
+              {visibleFacilities.length === 0 && <p className="text-xs text-gray-500 text-center py-4">{t.noResults}</p>}
               {visibleFacilities.map(item => (
                 <div key={item.id} className={`p-3 rounded-lg border shadow-sm text-sm ${mapStyle === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <div className="font-bold truncate">{item.name}</div>
