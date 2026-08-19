@@ -41,7 +41,7 @@ export default function DashboardGIS() {
   const savedTheme = localStorage.getItem('locapharma_theme') || 'light';
   const [mapStyle, setMapStyle] = useState<'light' | 'dark' | 'relief'>(savedTheme as any);
   
-  const [layers, setLayers] = useState({ farmacias: true, laboratorios: isMedico });
+  const [layers] = useState({ farmacias: true, laboratorios: isMedico });
   const [nearbyList, setNearbyList] = useState<any[]>([]);
   const [routeTarget, setRouteTarget] = useState<[number, number] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
